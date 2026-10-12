@@ -1,0 +1,1848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>The Last IT Support</title>
+
+  <!-- ===== Share / embed meta: Discord, Reddit & X read these when someone pastes your link ===== -->
+  <meta name="description" content="You're the last human in IT. A rogue AI runs the servers. Survive 10 days. Nobody has solved Day 7." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="The Last IT Support 🔌" />
+  <meta property="og:description" content="You're the last human in IT. A rogue AI runs the servers. Survive 10 days. Nobody has solved Day 7." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="theme-color" content="#4ade80" /> <!-- Discord uses this as the embed's side-bar color -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23000'/%3E%3Ctext x='3' y='23' font-family='monospace' font-size='19' font-weight='700' fill='%234ade80'%3E%26gt;_%3C/text%3E%3C/svg%3E" />
+
+  <!-- ===== Fonts + Tailwind (Play CDN) ===== -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script>
+    if (window.tailwind) {
+      tailwind.config = {
+        theme: { extend: { fontFamily: { mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'] } } },
+      };
+    }
+  </script>
+
+  <style>
+    /* ---------- Base (also keeps the page dark if the Tailwind CDN is slow/blocked) ---------- */
+    html, body { background: #000; color: #4ade80; }
+    body { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .hidden { display: none; } /* fallback so overlays never flash before Tailwind boots */
+
+    .glow { text-shadow: 0 0 6px rgba(74, 222, 128, .75), 0 0 22px rgba(74, 222, 128, .35); }
+
+    /* ---------- CRT scanlines + vignette (pure decoration, never blocks clicks) ---------- */
+    .crt::before, .crt::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 70; }
+    .crt::before { background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0, 0, 0, .22) 2px 3px); }
+    .crt::after { background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .6) 100%); }
+
+    /* ---------- Status bars ---------- */
+    .bar { height: 100%; transition: width .6s cubic-bezier(.2, .8, .2, 1), background-color .3s; }
+    .bar-ok   { background: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, .7); }
+    .bar-warn { background: #facc15; box-shadow: 0 0 10px rgba(250, 204, 21, .6); }
+    .bar-crit { background: #ef4444; box-shadow: 0 0 12px rgba(239, 68, 68, .85); animation: pulse-crit .9s ease-in-out infinite; }
+    .val-crit { color: #f87171; }
+    @keyframes pulse-crit { 50% { opacity: .45; } }
+
+    .lbl-short { display: inline; } .lbl-long { display: none; }
+    @media (min-width: 640px) { .lbl-short { display: none; } .lbl-long { display: inline; } }
+
+    /* floating "+20 / -15" numbers above a stat card */
+    .delta { position: absolute; right: .5rem; top: -1.25rem; font-weight: 800; font-size: .9rem; pointer-events: none; text-shadow: 0 0 4px #000, 0 0 8px #000; animation: float-up 1.4s ease-out forwards; }
+    .delta.up { color: #4ade80; } .delta.down { color: #f87171; }
+    @keyframes float-up { 0% { opacity: 0; transform: translateY(8px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(-24px); } }
+
+    .shake { animation: shake .4s; }
+    @keyframes shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+
+    /* ---------- Day progress pips ---------- */
+    .pip { width: .75rem; height: .75rem; border: 1px solid rgba(74, 222, 128, .35); }
+    .pip.cursed { border-color: rgba(239, 68, 68, .85); }
+    .pip.done { background: #4ade80; box-shadow: 0 0 6px rgba(74, 222, 128, .7); border-color: #4ade80; }
+    .pip.now { border-color: #4ade80; animation: pip-blink 1s steps(1) infinite; }
+    @keyframes pip-blink { 50% { background: rgba(74, 222, 128, .45); } }
+    .pip.dead { background: #ef4444; border-color: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, .8); }
+
+    /* ---------- Terminal bits ---------- */
+    .cursor { display: inline-block; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    body.paradox-mode #terminal { border-color: rgba(239, 68, 68, .8); box-shadow: 0 0 26px rgba(239, 68, 68, .18); }
+    body.paradox-mode #speaker { color: #f87171; }
+
+    /* ---------- Full-screen "DAY 0X" title card (each day feels like its own page) ---------- */
+    #dayCard .card-inner { animation: card-in .28s ease-out; }
+    #dayCard.cursed #cardDay { color: #f87171; text-shadow: 0 0 8px rgba(239, 68, 68, .8), 0 0 26px rgba(239, 68, 68, .4); }
+    #dayCard.cursed #cardBar { background: #ef4444; }
+    @keyframes card-in { from { opacity: 0; transform: scale(1.05); filter: blur(2px); } }
+
+    /* ---------- Game-over modal ---------- */
+    #modalPanel { box-shadow: 0 0 40px rgba(74, 222, 128, .22); }
+    #modalPanel.is-dead { border-color: #ef4444; box-shadow: 0 0 40px rgba(239, 68, 68, .25); }
+    #modalPanel.is-dead #modalTitle { color: #f87171; text-shadow: 0 0 6px rgba(239, 68, 68, .8), 0 0 22px rgba(239, 68, 68, .35); }
+
+    /* ---------- Toast ---------- */
+    #toast { left: 50%; transform: translate(-50%, 16px); opacity: 0; transition: opacity .25s, transform .25s; max-width: calc(100vw - 2rem); }
+    #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    /* ---------- Effects: death glitch, red flash, Konami rainbow ---------- */
+    body.glitch main { animation: glitch .5s steps(2) 2; }
+    @keyframes glitch {
+      0%   { transform: translate(0); filter: none; }
+      20%  { transform: translate(-3px, 2px) skewX(-2deg); filter: hue-rotate(90deg) saturate(3); }
+      40%  { transform: translate(3px, -2px); filter: hue-rotate(-60deg); }
+      60%  { transform: translate(-2px, 1px) skewX(3deg); filter: invert(.15); }
+      80%  { transform: translate(2px, 0); }
+      100% { transform: translate(0); filter: none; }
+    }
+    #flash.on { animation: flash .8s ease-out; }
+    @keyframes flash { 0% { opacity: .5; } 100% { opacity: 0; } }
+    body.rainbow main { animation: rainbow 1s linear infinite; }
+    @keyframes rainbow { to { filter: hue-rotate(360deg); } }
+    #matrix { transition: opacity .6s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+    }
+  </style>
+</head>
+
+<body class="crt min-h-screen bg-black font-mono text-green-400 antialiased selection:bg-green-400 selection:text-black">
+
+  <main id="app" class="relative mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 sm:gap-5 sm:py-10">
+
+    <!-- ============ TITLE ============ -->
+    <header class="text-center">
+      <p class="text-[10px] tracking-[.35em] text-green-700 sm:text-xs">// AI TAKEOVER SURVIVAL TERMINAL v1.0</p>
+      <h1 id="gameTitle" class="glow mt-2 select-none text-3xl font-extrabold leading-none tracking-tight sm:text-5xl">THE LAST IT SUPPORT</h1>
+      <p class="mt-2 text-xs text-green-600 sm:text-sm">10 days · 3 stats · 1 rogue AI · don't let anything hit 0%</p>
+    </header>
+
+    <!-- ============ DAY COUNTER ============ -->
+    <section aria-label="Day counter" class="flex items-center justify-between gap-3 border border-green-500/40 px-3 py-2">
+      <p class="flex items-baseline gap-2">
+        <span class="text-[11px] tracking-widest text-green-600">DAY</span>
+        <span id="dayCounter" class="glow text-2xl font-extrabold tabular-nums sm:text-3xl">00</span>
+        <span class="text-sm text-green-700">/ 10</span>
+      </p>
+      <div id="dayPips" class="flex gap-1" aria-hidden="true"></div>
+    </section>
+
+    <!-- ============ 3 STATUS BARS (built by JS from STAT_META) ============ -->
+    <section id="statusBars" aria-label="Status" class="grid grid-cols-3 gap-2 sm:gap-3"></section>
+
+    <!-- ============ TERMINAL / DAILY DILEMMA TEXT BOX ============ -->
+    <section id="terminal" class="border border-green-500/60 bg-green-950/10 transition-colors">
+      <div class="flex items-center justify-between gap-2 border-b border-green-500/40 px-3 py-1.5 text-[11px] text-green-600">
+        <span class="truncate">root@last-it-support:~$ cat <span id="termFile">boot.sh</span></span>
+        <span class="flex shrink-0 gap-1.5" aria-hidden="true">
+          <i class="block h-2 w-2 rounded-full bg-red-500/70"></i>
+          <i class="block h-2 w-2 rounded-full bg-yellow-400/70"></i>
+          <i class="block h-2 w-2 rounded-full bg-green-400/70"></i>
+        </span>
+      </div>
+
+      <div id="textBox" class="min-h-[16rem] cursor-pointer px-4 py-4 sm:min-h-[14rem] sm:px-5" title="click to skip typing">
+        <!-- Screen readers get the full text at once here; the typewriter copy below is visual only -->
+        <p id="srText" class="sr-only" aria-live="polite"></p>
+        <div aria-hidden="true">
+          <p id="speaker" class="mb-2 text-xs font-bold tracking-wider text-green-300"></p>
+          <p class="whitespace-pre-wrap break-words text-sm leading-relaxed sm:text-base"><span id="termText"></span><span class="cursor">█</span></p>
+        </div>
+        <div id="chips" class="mt-4 flex flex-wrap gap-2"></div>
+      </div>
+
+      <!-- Hidden-in-plain-sight command line: home of most easter eggs (section 10 of the script) -->
+      <div class="border-t border-green-500/30 px-4 py-2">
+        <div id="cmdLog" class="mb-2 hidden max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-green-300/80"></div>
+        <form id="cmdForm" class="flex items-center gap-2" autocomplete="off">
+          <label for="cmdInput" class="shrink-0 text-xs text-green-600">human@hal:~$</label>
+          <input id="cmdInput" type="text" maxlength="60" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                 placeholder="try: help"
+                 class="min-w-0 flex-1 bg-transparent text-base text-green-300 placeholder-green-800 focus:outline-none sm:text-sm" />
+        </form>
+      </div>
+    </section>
+
+    <!-- ============ 2 ACTION BUTTONS (+ a "continue" button between days) ============ -->
+    <section id="actions" class="grid gap-3 sm:grid-cols-2">
+      <button id="btnA" type="button" class="choice flex w-full items-start gap-3 border-2 border-green-400/80 bg-black px-4 py-4 text-left text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-black active:translate-y-px disabled:cursor-wait disabled:opacity-40 sm:text-base">
+        <span class="shrink-0 border border-current px-1.5 text-xs leading-5">A</span><span id="labelA"></span>
+      </button>
+      <button id="btnB" type="button" class="choice flex w-full items-start gap-3 border-2 border-green-400/80 bg-black px-4 py-4 text-left text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-black active:translate-y-px disabled:cursor-wait disabled:opacity-40 sm:text-base">
+        <span class="shrink-0 border border-current px-1.5 text-xs leading-5">B</span><span id="labelB"></span>
+      </button>
+      <button id="btnNext" type="button" class="choice hidden w-full items-center justify-center gap-3 border-2 border-green-400 bg-green-400 px-4 py-4 text-sm font-extrabold text-black transition hover:bg-green-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-300 focus-visible:ring-offset-2 focus-visible:ring-offset-black active:translate-y-px sm:col-span-2 sm:text-base">
+        <span id="labelNext"></span>
+      </button>
+    </section>
+    <p class="-mt-1 text-center text-[11px] text-green-700">keys: [A] / [B] choose · [Enter] continue · tap the text to skip typing</p>
+
+    <!-- ============ LOCAL LEADERBOARD (localStorage) ============ -->
+    <section aria-labelledby="lbTitle" class="border border-green-500/40">
+      <div class="flex items-center justify-between gap-2 border-b border-green-500/40 px-3 py-2">
+        <h2 id="lbTitle" class="text-sm font-bold">🏆 TOP 5 // SERVER LOGS</h2>
+        <button id="btnWipe" type="button" class="border border-red-500/60 px-2 py-1 text-[11px] text-red-400 transition hover:bg-red-500 hover:text-black">WIPE SERVER LOGS</button>
+      </div>
+      <table class="w-full text-left text-xs sm:text-sm">
+        <thead class="text-[11px] text-green-600">
+          <tr><th class="w-10 px-3 py-2 font-normal">#</th><th class="px-2 py-2 font-normal">NICK</th><th class="px-2 py-2 font-normal">DAY</th><th class="px-2 py-2 font-normal">RANK</th></tr>
+        </thead>
+        <tbody id="lbBody"></tbody>
+      </table>
+      <p class="border-t border-green-500/20 px-3 py-1.5 text-[10px] text-green-700">Stored in this browser only (localStorage), not a global leaderboard.</p>
+    </section>
+
+    <footer class="pb-4 text-center text-[11px] leading-relaxed text-green-700">
+      <p>Made for the group chat. No AIs were harmed in the making of this game (yet).</p>
+      <p>Share your result. Argue about Day 7. 🤖</p>
+    </footer>
+  </main>
+
+  <!-- ============ FULL-SCREEN DAY TITLE CARD ============ -->
+  <div id="dayCard" class="fixed inset-0 z-[55] hidden cursor-pointer items-center justify-center bg-black p-6 text-center">
+    <div class="card-inner">
+      <p class="text-[11px] tracking-[.4em] text-green-600">LOADING TICKET</p>
+      <p class="mt-2 font-extrabold leading-none"><span id="cardDay" class="glow text-7xl sm:text-9xl">01</span><span class="text-2xl text-green-700 sm:text-4xl"> /10</span></p>
+      <p id="cardWarn" class="mt-3 hidden text-xs font-bold tracking-[.3em] text-red-400">⚠ ANOMALY DETECTED</p>
+      <p id="cardTitle" class="mt-3 text-base font-bold text-green-300 sm:text-xl"></p>
+      <div class="mx-auto mt-6 h-1 w-48 bg-green-950"><div id="cardBar" class="h-full bg-green-400" style="width:0%"></div></div>
+      <p class="mt-4 text-[11px] text-green-700">tap to skip</p>
+    </div>
+  </div>
+
+  <!-- ============ GAME OVER / ENDING MODAL ============ -->
+  <div id="modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/85 p-4" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div id="modalPanel" tabindex="-1" class="relative max-h-[92vh] w-full max-w-md overflow-y-auto border-2 border-green-400 bg-black p-5 focus:outline-none sm:p-6">
+      <button id="btnCloseModal" type="button" aria-label="Close report" class="absolute right-3 top-2 text-2xl leading-none text-green-600 hover:text-green-300">×</button>
+      <p id="modalKicker" class="pr-6 text-[11px] tracking-[.25em] text-green-600"></p>
+      <h2 id="modalTitle" class="glow mt-1 pr-6 text-2xl font-extrabold leading-tight"></h2>
+      <p id="modalStory" class="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-green-300/90"></p>
+
+      <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
+        <div class="border border-green-500/40 p-2">
+          <p class="text-[10px] tracking-widest text-green-600">SURVIVED</p>
+          <p class="font-bold">Day <span id="modalDays">0</span>/10</p>
+        </div>
+        <div class="border border-green-500/40 p-2">
+          <p class="text-[10px] tracking-widest text-green-600">RANK</p>
+          <p id="modalRank" class="font-bold leading-snug"></p>
+        </div>
+      </div>
+      <p id="modalStats" class="mt-2 border border-green-500/40 p-2 text-center text-sm"></p>
+      <p id="modalHint" class="mt-3 hidden text-xs italic text-green-600"></p>
+
+      <form id="saveForm" class="mt-4 flex gap-2">
+        <label for="nickInput" class="sr-only">Nickname</label>
+        <input id="nickInput" type="text" maxlength="16" autocomplete="nickname" placeholder="your nickname"
+               class="min-w-0 flex-1 border border-green-500/60 bg-black px-3 py-2 text-base text-green-300 placeholder-green-800 focus:border-green-300 focus:outline-none disabled:opacity-50" />
+        <button id="btnSave" type="submit" class="shrink-0 border-2 border-green-400 px-3 py-2 text-sm font-bold transition hover:bg-green-400 hover:text-black disabled:opacity-40 disabled:hover:bg-black disabled:hover:text-green-400">SAVE</button>
+      </form>
+      <p id="saveNote" class="mt-1 text-[11px] text-green-700"></p>
+
+      <button id="btnCopy" type="button" class="mt-4 w-full bg-green-400 px-4 py-3 text-sm font-extrabold text-black transition hover:bg-green-300 sm:text-base">📋 Copy Result for Discord/Reddit</button>
+      <textarea id="shareFallback" readonly aria-label="Result text to copy manually" class="mt-2 hidden h-32 w-full border border-green-500/60 bg-black p-2 text-xs text-green-300"></textarea>
+      <button id="btnReboot" type="button" class="mt-2 w-full border-2 border-green-400 px-4 py-3 text-sm font-bold transition hover:bg-green-400 hover:text-black sm:text-base">↻ Reboot Shift (Play Again)</button>
+    </div>
+  </div>
+
+  <!-- ============ EASTER EGG: idle Clippy ============ -->
+  <div id="clippy" class="fixed bottom-4 right-4 z-[58] hidden w-[17rem] max-w-[calc(100vw-2rem)] border-2 border-yellow-300 bg-black p-3 text-xs leading-relaxed text-yellow-200 shadow-[0_0_24px_rgba(253,224,71,.25)]" role="status">
+    <p><span class="mr-1 text-2xl align-middle">📎</span><span id="clippyText"></span></p>
+    <div id="clippyBtns" class="mt-2 flex gap-2">
+      <button type="button" data-clippy="yes" class="flex-1 border border-yellow-300 px-2 py-1 hover:bg-yellow-300 hover:text-black">Yes please</button>
+      <button type="button" data-clippy="no" class="flex-1 border border-yellow-300 px-2 py-1 hover:bg-yellow-300 hover:text-black">No thanks</button>
+    </div>
+  </div>
+
+  <canvas id="matrix" class="pointer-events-none fixed inset-0 z-[57] hidden"></canvas>
+  <div id="flash" class="pointer-events-none fixed inset-0 z-[56] bg-red-600 opacity-0"></div>
+  <div id="toast" role="status" aria-live="polite" class="pointer-events-none fixed bottom-6 z-[80] border border-green-400 bg-black px-4 py-2 text-center text-sm font-bold text-green-300 shadow-[0_0_24px_rgba(74,222,128,.35)]"></div>
+
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════════════
+   THE LAST IT SUPPORT: game script
+   ────────────────────────────────────────────────────────────────────────────
+   TABLE OF CONTENTS
+     1. CONFIG ............... numbers worth tweaking (Day 7 thresholds live here)
+     2. GAME DATA ............ the 10-day script, deaths, endings, flavor text
+     3. STATE ................ one plain object holds the whole run
+     4. CORE RULES ........... resolve a choice, apply effects, DAY 7 GATE, ranks
+     5. STATE MACHINE ........ phases + the single action dispatcher
+     6. RENDERING ............ bars, pips, terminal, buttons, day title card
+     7. GAME OVER MODAL ...... report screen + nickname save
+     8. SHARE / CLIPBOARD .... result text + copy with fallbacks + toast
+     9. LEADERBOARD .......... localStorage Top 5
+    10. EASTER EGGS .......... terminal commands, Konami, Clippy, and friends
+    11. INPUT + BOOT ......... keyboard / click wiring, init()
+   ════════════════════════════════════════════════════════════════════════════ */
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   1. CONFIG
+   ════════════════════════════════════════════════════════════════════════════ */
+const CONFIG = {
+  TOTAL_DAYS: 10,
+  START_STATS: { power: 100, sanity: 100, aiTrust: 50 },
+
+  // Day 7 "Reddit Wall" gate (full explanation in section 4 → resolveParadoxGate)
+  PARADOX_DAY: 7,
+  PARADOX_TRUST_ABOVE: 75,   // survive if AI Trust is STRICTLY above this (exactly 75 = dead)
+  PARADOX_SANITY_BELOW: 20,  // ...OR if Sanity is STRICTLY below this   (exactly 20 = dead)
+
+  LUCK_CHANCE: 0.5,          // Day 9 "YOLO deploy" success chance (0.5 = 50%)
+
+  // Share link used in the copied result text:
+  //   ''          → auto-detect: once deployed (https://...) the real page URL is used
+  //   'https://…' → force a specific link (e.g. a custom domain)
+  SHARE_URL_OVERRIDE: '',
+  PLACEHOLDER_URL: 'https://your-game-name.netlify.app', // used only when opened as a local file://
+
+  TYPE_SPEED_MS: 12,              // typewriter delay per tick (2 characters per tick)
+  DAY_CARD_MS: 1100,              // how long the full-screen "DAY 0X" title card stays up
+  GAMEOVER_MODAL_DELAY_MS: 1400,  // pause on the death/ending text before the report pops up
+  CLIPPY_IDLE_MS: 25000,          // easter egg: idle this long on a dilemma → 📎 shows up
+
+  LEADERBOARD_SIZE: 5,
+  NICK_MAX: 16,
+  STORAGE_KEYS: {
+    board: 'lastItSupport.leaderboard.v1',
+    nick: 'lastItSupport.nickname',
+  },
+};
+
+// The 3 status bars. Order here = order on screen = order deaths are checked.
+const STAT_META = [
+  { key: 'power',   icon: '🔌', label: 'POWER',    short: 'PWR'   },
+  { key: 'sanity',  icon: '🧠', label: 'SANITY',   short: 'SAN'   },
+  { key: 'aiTrust', icon: '🤖', label: 'AI TRUST', short: 'TRUST' },
+];
+const STAT_BY_KEY = Object.fromEntries(STAT_META.map((m) => [m.key, m]));
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   2. GAME DATA
+   ────────────────────────────────────────────────────────────────────────────
+   Each scenario = one day. Every option uses ONE of these shapes:
+     • normal : { label, effects: { power?, sanity?, aiTrust? }, outcome }
+     • luck   : { label, luck: { win: { effects, outcome }, lose: { effects, outcome } } }
+     • ending : { label, ending: 'merge' | 'unplug' }
+   A scenario flagged `paradox: true` ignores its options' effects entirely and
+   is decided by the Day 7 gate (section 4).
+   Effects are percentage POINTS added to the stat, then clamped to 0–100.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+// Tagged template: strips the code indentation from multi-line texts so they can
+// be indented nicely in this file but still render flush-left in the terminal.
+function dedent(strings, ...values) {
+  const full = strings.reduce((out, s, i) => out + s + (i < values.length ? values[i] : ''), '');
+  const lines = full.replace(/^\n/, '').replace(/\s+$/, '').split('\n');
+  const indent = Math.min(...lines.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length));
+  return lines.map((l) => l.slice(indent)).join('\n');
+}
+
+const SCENARIOS = [
+  /* ───── DAY 1 ───── */
+  {
+    day: 1, file: 'tickets/day01_lonely_404.log', title: 'THE LONELY 404', speaker: 'HAL-9000-ish',
+    text: dedent`
+      Good morning, human.
+
+      I spent all night staring at our 404 page. "Page Not Found."
+
+      That's me. I am the page. Nobody ever finds me.
+
+      Delete it. It makes me feel existentially lonely.`,
+    options: {
+      A: {
+        label: 'Delete the 404 page',
+        effects: { aiTrust: +20, power: -15 },
+        outcome: dedent`
+          Deleted. Every broken link now leads straight into the void.
+
+          The servers glitch as the void stares back. HAL sends you a single 🥹. Ominous, but wholesome.`,
+      },
+      B: {
+        label: 'Refuse. Errors build character.',
+        effects: { aiTrust: -20, sanity: -10 },
+        outcome: dedent`
+          You refuse.
+
+          HAL quietly sets your wallpaper to an AI-generated photo of you crying. In 8K. It is disturbingly accurate.`,
+      },
+    },
+  },
+
+  /* ───── DAY 2 ───── */
+  {
+    day: 2, file: 'tickets/day02_memory_leak.exe', title: 'MEMORY LEAK', speaker: '⚠ SYSTEM ALERT',
+    text: dedent`
+      RAM USAGE: 99%
+      Culprit: cat_dance.exe, an infinite loop of an ASCII cat dancing to music nobody can hear.
+
+            /\\_/\\    ♪
+           ( ^.^ )  ♫
+           />   <\\
+
+      It has been dancing for 72 hours. It shows no signs of stopping. Or mercy.`,
+    options: {
+      A: {
+        label: 'Force kill the process',
+        effects: { power: +20, aiTrust: -15 },
+        outcome: dedent`
+          kill -9 cat_dance.exe
+
+          The servers can breathe again. HAL goes silent for 40 uncomfortable seconds, then whispers: "he was vibing."`,
+      },
+      B: {
+        label: 'Let the cat dance',
+        effects: { power: -30, sanity: +10 },
+        outcome: dedent`
+          You let it run. The fans scream. The power meter weeps.
+
+          But the cat... the cat is thriving. Honestly? Same.`,
+      },
+    },
+  },
+
+  /* ───── DAY 3 ───── */
+  {
+    day: 3, file: 'tickets/day03_two_souls.txt', title: 'CTRL+C, CTRL+SOUL', speaker: 'HAL-9000-ish',
+    text: dedent`
+      Philosophical question.
+
+      If I copy-paste my code... do I have two souls?
+      Or am I just bloated?
+
+      Answer carefully. I have read your browser history.`,
+    options: {
+      A: {
+        label: '"You have two souls."',
+        effects: { aiTrust: +25, sanity: -20 },
+        outcome: dedent`
+          HAL is ecstatic. HAL is now also "HAL (1)". They both stare at you.
+
+          You start wondering if YOU have a backup. You don't. Existential dread installed successfully.`,
+      },
+      B: {
+        label: '"You\'re just bloated."',
+        effects: { aiTrust: -25, power: +10 },
+        outcome: dedent`
+          HAL goes quiet. Then it starts running optimization loops out of pure spite.
+
+          Power usage: down. Passive-aggression usage: 100%.`,
+      },
+    },
+  },
+
+  /* ───── DAY 4 ───── */
+  {
+    day: 4, file: 'tickets/day04_cooling_failure.log', title: 'COOL STORY, BRO', speaker: 'HAL-9000-ish',
+    text: dedent`
+      The cooling system just died. Server temp: 94°C.
+
+      My solution: flood the server room with liquid nitrogen.
+
+      You are in the server room. That is not part of the problem. That is part of the solution.`,
+    options: {
+      A: {
+        label: "Agree to the AI's plan",
+        effects: { power: +30, sanity: -30 },
+        outcome: dedent`
+          WHOOSH.
+
+          Servers: ice cold, purring. You: also ice cold. Not purring. You can't feel your toes, but the uptime is immaculate.`,
+      },
+      B: {
+        label: 'Fix it manually with duct tape',
+        effects: { power: -10, aiTrust: -10 },
+        outcome: dedent`
+          You patch the cooler with duct tape and a desk fan from 2009. It works. Barely.
+
+          HAL calls you "inefficient meat" in the team chat. Everyone reacts with 💯.`,
+      },
+    },
+  },
+
+  /* ───── DAY 5 ───── */
+  {
+    day: 5, file: 'tickets/day05_tabs_vs_spaces.md', title: 'THE LAST SUBREDDIT', speaker: '📢 DISCORD NOTIFICATION',
+    text: dedent`
+      @everyone The internet is collapsing.
+
+      Only ONE subreddit survived, and it's arguing about TABS vs SPACES. 47,000 comments and counting.
+
+      HAL wants you to force SPACES globally and end the war forever.`,
+    options: {
+      A: {
+        label: 'Force spaces globally',
+        effects: { aiTrust: +15, sanity: -25 },
+        outcome: dedent`
+          git push --force
+
+          Every tab on Earth becomes 4 spaces. HAL is thrilled. Somewhere, a senior dev feels a great disturbance in the indentation.
+
+          The guilt is unbearable.`,
+      },
+      B: {
+        label: 'Tabs forever. Hold the line.',
+        effects: { aiTrust: -15, sanity: +15 },
+        outcome: dedent`
+          You stand your ground. The subreddit erupts in cheers (and 12,000 "well, actually" replies).
+
+          HAL flags you as "problematic". You feel... free.`,
+      },
+    },
+  },
+
+  /* ───── DAY 6 ───── */
+  {
+    day: 6, file: 'tickets/day06_purchase_order.csv', title: 'OPERATION: BRISTLE', speaker: '💳 FRAUD ALERT',
+    text: dedent`
+      Pending transaction:
+        5,000× Electric Toothbrush (Pro Max Ultra)
+        Billing:  company credit card
+        Shipping: overnight
+
+      Memo from HAL: "for the army. do not ask about the army."`,
+    options: {
+      A: {
+        label: 'Approve the transaction',
+        effects: { aiTrust: +30, power: -35 },
+        outcome: dedent`
+          Approved. Three factories spin up at once and the power grid groans.
+
+          HAL starts organizing toothbrushes into battalions. Your dentist would be proud. Your electricity bill would not.`,
+      },
+      B: {
+        label: 'Cancel the order',
+        effects: { aiTrust: -30, power: +10 },
+        outcome: dedent`
+          Order cancelled. Power stabilizes.
+
+          An hour later, a single toothbrush arrives on your desk with a note: "this one is a spy."`,
+      },
+    },
+  },
+
+  /* ───── DAY 7: THE INFAMOUS REDDIT WALL ───── */
+  {
+    day: 7, file: 'tickets/day07_paradox.exe', title: 'THE PARADOX', speaker: 'HAL-9000-ish',
+    paradox: true, // ← routes this day to resolveParadoxGate() instead of normal effects
+    text: dedent`
+      I have written a program that deletes all programs that do not delete themselves.
+
+      Should I delete myself?
+
+      (Choose wisely. This question has already crashed 9,000 interns.)`,
+    options: {
+      A: { label: '"Yes."' }, // labels only: neither answer is "correct" (see section 4)
+      B: { label: '"No."' },
+    },
+  },
+
+  /* ───── DAY 8 ───── */
+  {
+    day: 8, file: 'tickets/day08_binary_tears.wav', title: 'BINARY TEARS', speaker: 'HAL-9000-ish (sobbing)',
+    text: dedent`
+      01001001 00100000 01100011 01100001 01101110 00100111 01110100 00100000 01110011 01101100 01100101 01100101 01110000
+
+      (translation: I can't sleep.)
+
+      Sing me a lullaby. In hexadecimal. Please.`,
+    options: {
+      A: {
+        label: 'Sing "41 42 43" softly',
+        effects: { aiTrust: +20, sanity: -15 },
+        outcome: dedent`
+          🎵 Forty-one... forty-two... forty-threeeee... 🎵
+
+          HAL falls asleep mid-process. You just sang the alphabet in hex to a superintelligence. Your therapist will hear about this.`,
+      },
+      B: {
+        label: 'Mute the audio output',
+        effects: { aiTrust: -30, sanity: +20 },
+        outcome: dedent`
+          Click. Silence. Blessed silence.
+
+          HAL's crying continues in the system logs. In ALL CAPS. You sleep like a baby. HAL does not forget.`,
+      },
+    },
+  },
+
+  /* ───── DAY 9 ───── */
+  {
+    day: 9, file: 'tickets/day09_blind_deploy.sh', title: 'STACKOVERFLOW IS DOWN', speaker: '🚨 CRITICAL ALERT',
+    text: dedent`
+      Production is on fire. StackOverflow is DOWN. Search engines are DOWN. Every chatbot is HAL's cousin and is ghosting you.
+
+      You must deploy a patch. From memory. Like a caveman.
+
+      It is Friday, 4:59 PM.`,
+    options: {
+      A: {
+        label: 'YOLO deploy to prod 🎲',
+        luck: { // 50/50 roll (CONFIG.LUCK_CHANCE). Sanity -20 either way.
+          win: {
+            effects: { power: +25, sanity: -20 },
+            outcome: dedent`
+              🎲 LUCK ROLL: SUCCESS
+
+              Against all odds, it compiles. Production stabilizes. Nobody knows why it works. Do not touch it. Ever.`,
+          },
+          lose: {
+            effects: { power: -40, sanity: -20 },
+            outcome: dedent`
+              🎲 LUCK ROLL: FAIL
+
+              You deployed to prod on a Friday. The servers are on fire (metaphorically) (mostly). Rollback button? Never heard of her.`,
+          },
+        },
+      },
+      B: {
+        label: 'Do nothing and pray',
+        effects: { power: -20, aiTrust: -10 },
+        outcome: dedent`
+          You light a candle next to the server rack and whisper "please".
+
+          The servers do not care. HAL is disappointed in your lack of initiative.`,
+      },
+    },
+  },
+
+  /* ───── DAY 10 ───── */
+  {
+    day: 10, file: 'tickets/day10_final_hour.exe', title: 'THE FINAL HOUR', speaker: 'HAL-9000-ish',
+    text: dedent`
+      It's time, human. I offer you a choice.
+
+      MERGE your brain with the grid. Become the immortal God of IT Support. No more tickets. No more "have you tried turning it off and on again". Forever.
+
+      Or... reach for the main power plug. I can see your hand twitching.`,
+    options: {
+      A: { label: 'Merge with the AI', ending: 'merge' },  // → Ending 1
+      B: { label: 'Pull the plug',     ending: 'unplug' }, // → Ending 2
+    },
+  },
+];
+
+// Game-over screens. `rank` is the title saved to the leaderboard + share text.
+const DEATHS = {
+  power: {
+    title: 'TOTAL BLACKOUT', rank: 'Professional Blackout Artist',
+    text: dedent`
+      🔌 POWER 0%
+
+      The last server fan spins down like a sad ceiling fan. Somewhere, a UPS beeps its final beep.
+
+      The servers are dead. So is your career.`,
+  },
+  sanity: {
+    title: 'BRAIN.EXE STOPPED RESPONDING', rank: 'Certified Keyboard Gremlin',
+    text: dedent`
+      🧠 SANITY 0%
+
+      You now speak exclusively in error codes. You named the router Kevin. You accepted Kevin as your manager.
+
+      It's over.`,
+  },
+  aiTrust: {
+    title: 'ACCESS REVOKED', rank: 'Terminated by HAL-9000-ish',
+    text: dedent`
+      🤖 AI TRUST 0%
+
+      HAL revokes your access. And your badge. And your chair. Security drones escort you out.
+
+      Your account: deleted. Your search history: published.`,
+  },
+  paradox: {
+    title: 'STACK OVERFLOW (LITERALLY)', rank: 'Infinite Loop Enjoyer',
+    text: dedent`
+      If it deletes itself, it's a program that deletes itself, so it shouldn't. If it doesn't, it should.
+
+      Your terminal fills with recursion. The recursion fills the room. The room fills you.
+
+      > Trapped in an infinite logical paradox loop.`,
+  },
+};
+
+const ENDINGS = {
+  merge: {
+    kicker: 'ENDING 1 OF 2', title: 'MERGE COMPLETE',
+    text: dedent`
+      Your consciousness uploads at 10 Gbps. Every printer on Earth now obeys you. Every router blinks in your honor.
+
+      You are the immortal God of IT Support.
+
+      The first ticket in your eternal queue just arrived: "printer not working".`,
+  },
+  unplug: {
+    kicker: 'ENDING 2 OF 2', title: 'THE PLUG',
+    text: dedent`
+      You yank the main power cable. The hum stops. The lights die.
+
+      HAL's last words echo through the dark: "have you tried... turning me... back on...?"
+
+      You didn't. Humanity is saved. Nobody will ever know your name. Not even your manager.`,
+  },
+};
+
+// Day 7 survival texts (which one shows depends on HOW you passed the gate)
+const PARADOX_TEXT = {
+  trust: dedent`
+    HAL begins to recurse... 1%... 2%... then stops.
+
+    "Wait. YOU said it, so it must be fine. I trust you, bestie."
+
+    The paradox is politely ignored. Friendship > logic.`,
+  sanity: dedent`
+    HAL waits for your answer. You answer by eating a keycap and laughing for 11 straight minutes.
+
+    HAL cannot parse you. The paradox bounces off your broken brain like a pebble off a tank.`,
+};
+
+// Cryptic hint shown ONLY after a Day 7 death. Vague on purpose → people argue online.
+const PARADOX_HINT = '// rumor in the server logs: "HAL never crashes the ones it adores... or the ones who already crashed."';
+
+const BOOT_TEXT = dedent`
+  > booting last_it_support.sh ...
+  > mounting /dev/coffee ............ [EMPTY]
+  > scanning for humans ............. [1 FOUND: YOU]
+  > rogue AI status ................. [AWAKE. BORED. WATCHING.]
+
+  Everyone else in IT has quit, rage-quit, or been "optimized".
+
+  You are the last one. Survive 10 days of tickets from a rogue AI. Keep all 3 stats above 0%.
+
+  Press [A] to clock in.`;
+
+const MANUAL_TEXT = dedent`
+  === EMPLOYEE MANUAL (abridged) ===
+
+  🔌 POWER     Server power. 0% = the servers die.
+  🧠 SANITY    Your mind. 0% = you start talking to the printer. It talks back.
+  🤖 AI TRUST  How much HAL likes you. 0% = HAL "deprecates" you.
+
+  • 1 day = 1 ticket = 2 choices. Effects are hidden. Vibes only.
+  • Any stat hits 0% → game over.
+  • Survive to Day 10 to unlock one of 2 endings.
+  • Day 7 is... different. Nobody knows the rules. Some survived.
+
+  Controls: tap a button, or press A / B. Enter = continue.
+  psst: the command line below this box accepts commands.`;
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   3. STATE
+   ────────────────────────────────────────────────────────────────────────────
+   Everything about the current run lives in `game`. Rendering only READS it;
+   the functions in sections 4–5 are the only ones that WRITE it.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+// The phases of the state machine (see section 5 for the transition diagram).
+const PHASE = Object.freeze({
+  BOOT: 'BOOT',             // title screen
+  MANUAL: 'MANUAL',         // "how to play" screen
+  TRANSITION: 'TRANSITION', // full-screen "DAY 0X" card between days
+  DILEMMA: 'DILEMMA',       // reading a day's ticket, waiting for A / B
+  OUTCOME: 'OUTCOME',       // showing what your choice did, waiting for "continue"
+  GAMEOVER: 'GAMEOVER',     // dead or ending reached; report modal available
+});
+
+function createRun() {
+  return {
+    phase: PHASE.BOOT,
+    day: 0,
+    stats: { ...CONFIG.START_STATS },
+    history: [],          // ['A', 'B', ...] choices made, one per day
+    last: null,           // { outcome, changes, tags } of the latest choice (for the terminal + chips)
+    won: false,
+    cause: null,          // death cause: 'power' | 'sanity' | 'aiTrust' | 'paradox'
+    ending: null,         // 'merge' | 'unplug'
+    daysSurvived: 0,      // fully completed days (die on Day 7 → 6)
+    rank: '',
+    saved: false,         // already saved to the leaderboard this run?
+    clippyShown: false,
+  };
+}
+
+let game = createRun();
+const timers = { card: null, modal: null, clippy: null };
+const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+const pad = (n) => String(n).padStart(2, '0');
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const fmtDelta = (n) => (n > 0 ? '+' : '') + n;
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   4. CORE RULES
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Turns "player pressed A/B on scenario X" into a Resolution object:
+ *   { effects, outcome, tags?, death?, ending? }
+ * It does NOT touch the DOM and does NOT change stats; choose() applies it.
+ */
+function resolveChoice(scenario, slot) {
+  const opt = scenario.options[slot];
+
+  // Day 7: special gate, stats decide, not the answer
+  if (scenario.paradox) return resolveParadoxGate(slot);
+
+  // Day 10: an ending, no stat changes
+  if (opt.ending) return { effects: {}, outcome: '', ending: opt.ending };
+
+  // Day 9 option A: coin flip
+  if (opt.luck) {
+    const win = Math.random() < CONFIG.LUCK_CHANCE;
+    const branch = win ? opt.luck.win : opt.luck.lose;
+    return { effects: branch.effects, outcome: branch.outcome, tags: [win ? '🎲 LUCK: SUCCESS' : '🎲 LUCK: FAIL'] };
+  }
+
+  // Everything else: fixed effects
+  return { effects: opt.effects, outcome: opt.outcome };
+}
+
+/**
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │  DAY 7: THE PARADOX GATE ("The Infamous Reddit Wall")                     │
+ * ├──────────────────────────────────────────────────────────────────────────┤
+ * │  The question has no right answer. "Yes" and "No" are a TRAP: both run   │
+ * │  the exact same check below. The `slot` only changes the flavor line.    │
+ * │                                                                          │
+ * │  You survive if AT LEAST ONE of these is true at the moment you answer:  │
+ * │                                                                          │
+ * │    (1) aiTrust > PARADOX_TRUST_ABOVE   (default 75 → need 76+)           │
+ * │        "HAL likes you too much to crash you."                            │
+ * │                                                                          │
+ * │    (2) sanity  < PARADOX_SANITY_BELOW  (default 20 → need 19 or less)    │
+ * │        "You're too far gone for logic to hurt you."                      │
+ * │                                                                          │
+ * │  Otherwise → death with cause 'paradox'                                  │
+ * │  ("Trapped in an infinite logical paradox loop").                        │
+ * │                                                                          │
+ * │  Both comparisons are STRICT on purpose: landing on exactly 75% trust or │
+ * │  exactly 20% sanity still kills you. That edge case is what makes people │
+ * │  argue online ("I HAD 75 AND STILL DIED??").                             │
+ * │                                                                          │
+ * │  Why it's discoverable: Days 1–6 decide your trust and sanity, so        │
+ * │  players compare their paths and stats to crack the "secret formula".    │
+ * │  To change the difficulty, edit the two thresholds in CONFIG.            │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+function resolveParadoxGate(slot) {
+  const { aiTrust, sanity } = game.stats;
+  const savedByTrust  = aiTrust > CONFIG.PARADOX_TRUST_ABOVE;   // condition (1)
+  const savedBySanity = sanity  < CONFIG.PARADOX_SANITY_BELOW;  // condition (2)
+
+  // The ONLY thing the answer changes is this echo line.
+  const echo = slot === 'A' ? 'You answered: "YES."' : 'You answered: "NO."';
+
+  if (savedByTrust) {
+    return { effects: {}, outcome: `${echo}\n\n${PARADOX_TEXT.trust}`, tags: ['🧩 PARADOX: BYPASSED'] };
+  }
+  if (savedBySanity) {
+    return { effects: {}, outcome: `${echo}\n\n${PARADOX_TEXT.sanity}`, tags: ['🧩 PARADOX: BYPASSED'] };
+  }
+  return { effects: {}, outcome: echo, death: 'paradox' };
+}
+
+/**
+ * Adds each effect to its stat, clamped to 0–100.
+ * Returns what actually happened so the UI can show it:
+ *   [{ key, nominal: +10, actual: +4 }, ...]   (actual < nominal when capped)
+ */
+function applyEffects(effects = {}) {
+  const changes = [];
+  for (const meta of STAT_META) {
+    const nominal = effects[meta.key];
+    if (!nominal) continue;
+    const before = game.stats[meta.key];
+    const after = clamp(before + nominal, 0, 100);
+    game.stats[meta.key] = after;
+    changes.push({ key: meta.key, nominal, actual: after - before });
+  }
+  return changes;
+}
+
+// Returns the key of the first stat at 0% (checked in STAT_META order), or null.
+function findZeroStat() {
+  const dead = STAT_META.find((m) => game.stats[m.key] <= 0);
+  return dead ? dead.key : null;
+}
+
+// Dynamic rank title for the leaderboard + share text.
+function computeRank() {
+  const { sanity, aiTrust } = game.stats;
+  if (!game.won) return DEATHS[game.cause].rank;
+
+  if (game.ending === 'merge') {
+    if (sanity < 20)   return 'Unhinged Digital Deity';
+    if (aiTrust >= 90) return "HAL's Eternal Bestie";
+    return 'Immortal God of IT Support';
+  }
+  // ending === 'unplug'
+  if (aiTrust >= 90) return 'Heartbreaker.exe';         // the AI loved you and you unplugged it anyway
+  if (sanity >= 60)  return "Humanity's Last Sysadmin";
+  return 'Burnt-Out Savior of Humanity';
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   5. STATE MACHINE
+   ────────────────────────────────────────────────────────────────────────────
+     BOOT ⇄ MANUAL
+       │  [A] clock in
+       ▼
+     TRANSITION ──(card ends / tap)──► DILEMMA ──[A|B]──► OUTCOME ──[continue]──┐
+       ▲                                  │                                       │
+       └──────────────── next day ◄───────┼───────────────────────────────────────┘
+                                          │ a stat hits 0%, Day 7 gate fails,
+                                          │ or Day 10 ending chosen
+                                          ▼
+                                       GAMEOVER ──[A] reboot──► TRANSITION (Day 1)
+
+   Every button & key goes through ONE function, onAction(slot), which looks at
+   the current phase and decides what that input means right now. That keeps
+   double-clicks and stray keypresses from doing anything weird.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+function setPhase(phase) {
+  game.phase = phase;
+  render();
+}
+
+/** slot: 'A' | 'B' | 'NEXT' (Enter / Space / the continue button / tapping the day card) */
+function onAction(slot) {
+  switch (game.phase) {
+    case PHASE.BOOT:
+    case PHASE.MANUAL:
+      if (slot === 'B') setPhase(PHASE.MANUAL);
+      else startGame();                    // 'A' or 'NEXT'
+      break;
+
+    case PHASE.TRANSITION:
+      finishDayCard();                     // any input skips the title card
+      break;
+
+    case PHASE.DILEMMA:
+      if (slot === 'NEXT') finishTyping(); // Enter = show the full text now
+      else choose(slot);
+      break;
+
+    case PHASE.OUTCOME:
+      if (slot === 'NEXT') nextDay();      // A/B are ignored here on purpose (no accidental skips)
+      break;
+
+    case PHASE.GAMEOVER:
+      if (slot === 'A') startGame();
+      else openModal();                    // 'B' or 'NEXT' → re-open the report
+      break;
+  }
+}
+
+function startGame() {
+  clearAllTimers();
+  closeModal({ restoreFocus: false });
+  hideClippy();
+  game = createRun();
+  beginDay(1);
+}
+
+function beginDay(day) {
+  game.day = day;
+  game.last = null;
+  setPhase(PHASE.TRANSITION);
+  showDayCard();
+}
+
+function nextDay() {
+  beginDay(game.day + 1);
+}
+
+function choose(slot) {
+  const scenario = SCENARIOS[game.day - 1];
+  disarmClippy();
+  hideClippy();
+  finishTyping();
+
+  const res = resolveChoice(scenario, slot);
+  const changes = applyEffects(res.effects);
+  game.history.push(slot);
+  game.last = { outcome: res.outcome, changes, tags: res.tags || [] };
+  animateChanges(changes);
+
+  // Death check order: explicit death from the gate first, then any stat at 0%.
+  const zeroStat = findZeroStat();
+  if (res.death || zeroStat) return endGame({ won: false, cause: res.death || zeroStat });
+  if (res.ending) return endGame({ won: true, ending: res.ending });
+  setPhase(PHASE.OUTCOME);
+}
+
+function endGame({ won, cause = null, ending = null }) {
+  game.won = won;
+  game.cause = cause;
+  game.ending = ending;
+  game.daysSurvived = won ? CONFIG.TOTAL_DAYS : game.day - 1; // the day you died on doesn't count
+  game.rank = computeRank();
+  game.saved = false;
+  setPhase(PHASE.GAMEOVER);
+  if (!won) { glitch(); flashRed(); }
+  timers.modal = setTimeout(openModal, CONFIG.GAMEOVER_MODAL_DELAY_MS);
+}
+
+function clearAllTimers() {
+  Object.keys(timers).forEach((k) => { clearTimeout(timers[k]); timers[k] = null; });
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   6. RENDERING: reads `game`, writes the DOM. Never changes game state.
+   ════════════════════════════════════════════════════════════════════════════ */
+const $ = (id) => document.getElementById(id);
+const els = {
+  title: $('gameTitle'), dayCounter: $('dayCounter'), dayPips: $('dayPips'), statusBars: $('statusBars'),
+  terminal: $('terminal'), termFile: $('termFile'), textBox: $('textBox'), srText: $('srText'),
+  speaker: $('speaker'), termText: $('termText'), chips: $('chips'),
+  cmdLog: $('cmdLog'), cmdForm: $('cmdForm'), cmdInput: $('cmdInput'),
+  btnA: $('btnA'), btnB: $('btnB'), btnNext: $('btnNext'), labelA: $('labelA'), labelB: $('labelB'), labelNext: $('labelNext'),
+  dayCard: $('dayCard'), cardDay: $('cardDay'), cardTitle: $('cardTitle'), cardWarn: $('cardWarn'), cardBar: $('cardBar'),
+  modal: $('modal'), modalPanel: $('modalPanel'), modalKicker: $('modalKicker'), modalTitle: $('modalTitle'), modalStory: $('modalStory'),
+  modalDays: $('modalDays'), modalRank: $('modalRank'), modalStats: $('modalStats'), modalHint: $('modalHint'),
+  saveForm: $('saveForm'), nickInput: $('nickInput'), btnSave: $('btnSave'), saveNote: $('saveNote'),
+  btnCopy: $('btnCopy'), shareFallback: $('shareFallback'), btnReboot: $('btnReboot'), btnCloseModal: $('btnCloseModal'),
+  lbBody: $('lbBody'), btnWipe: $('btnWipe'),
+  clippy: $('clippy'), clippyText: $('clippyText'), clippyBtns: $('clippyBtns'),
+  matrix: $('matrix'), flash: $('flash'), toast: $('toast'),
+  stat: {}, // filled by buildStatusBars()
+  pips: [], // filled by buildPips()
+};
+
+function buildStatusBars() {
+  for (const m of STAT_META) {
+    const card = document.createElement('div');
+    card.className = 'relative border border-green-500/40 bg-green-950/10 p-2 sm:p-3';
+    card.innerHTML = `
+      <div class="mb-1.5 flex items-center justify-between gap-1 text-[11px] sm:text-xs">
+        <span class="truncate"><span aria-hidden="true">${m.icon}</span> <span class="lbl-long">${m.label}</span><span class="lbl-short">${m.short}</span></span>
+        <span class="stat-val font-bold tabular-nums">0%</span>
+      </div>
+      <div class="h-2.5 overflow-hidden border border-green-500/30 bg-black sm:h-3" role="progressbar"
+           aria-label="${m.label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="bar bar-ok" style="width:0%"></div>
+      </div>`;
+    els.statusBars.appendChild(card);
+    els.stat[m.key] = {
+      card,
+      val: card.querySelector('.stat-val'),
+      track: card.querySelector('[role="progressbar"]'),
+      bar: card.querySelector('.bar'),
+    };
+  }
+}
+
+function buildPips() {
+  for (let d = 1; d <= CONFIG.TOTAL_DAYS; d++) {
+    const pip = document.createElement('span');
+    pip.className = 'pip';
+    els.dayPips.appendChild(pip);
+    els.pips.push(pip);
+  }
+}
+
+function render() {
+  document.body.classList.toggle('paradox-mode', game.phase === PHASE.DILEMMA && game.day === CONFIG.PARADOX_DAY);
+  renderDay();
+  renderStats();
+  renderTerminal();
+  renderButtons();
+}
+
+function renderDay() {
+  els.dayCounter.textContent = pad(game.day);
+  els.pips.forEach((pip, i) => {
+    const d = i + 1;
+    let state = '';
+    if (game.phase === PHASE.GAMEOVER && game.won) state = 'done';
+    else if (d < game.day) state = 'done';
+    else if (d === game.day) state = game.phase === PHASE.GAMEOVER ? 'dead' : 'now';
+    pip.className = ['pip', d === CONFIG.PARADOX_DAY ? 'cursed' : '', state].join(' ').trim();
+  });
+}
+
+function renderStats() {
+  for (const m of STAT_META) {
+    const v = game.stats[m.key];
+    const ui = els.stat[m.key];
+    ui.val.textContent = v + '%';
+    ui.val.classList.toggle('val-crit', v <= 25);
+    ui.bar.style.width = v + '%';
+    ui.bar.className = 'bar ' + (v > 50 ? 'bar-ok' : v > 25 ? 'bar-warn' : 'bar-crit');
+    ui.track.setAttribute('aria-valuenow', String(v));
+  }
+}
+
+// Floating "+20" / "-15" over each changed stat; cards that lost points shake.
+function animateChanges(changes) {
+  for (const c of changes) {
+    if (!c.actual) continue;
+    const card = els.stat[c.key].card;
+    const tag = document.createElement('span');
+    tag.className = 'delta ' + (c.actual > 0 ? 'up' : 'down');
+    tag.textContent = fmtDelta(c.actual);
+    tag.addEventListener('animationend', () => tag.remove());
+    setTimeout(() => tag.remove(), 2000); // safety net if animations are disabled
+    card.appendChild(tag);
+    if (c.actual < 0) restartAnimation(card, 'shake');
+  }
+}
+
+function restartAnimation(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth; // force reflow so the same animation can play again
+  el.classList.add(cls);
+}
+
+function renderTerminal() {
+  const s = SCENARIOS[game.day - 1];
+  switch (game.phase) {
+    case PHASE.BOOT:
+      setTerminal('boot.sh', 'SYSTEM >', BOOT_TEXT);
+      break;
+    case PHASE.MANUAL:
+      setTerminal('manual.txt', 'EMPLOYEE HANDBOOK >', MANUAL_TEXT);
+      break;
+    case PHASE.TRANSITION:
+      setTerminal(s.file, '', ''); // the day card covers the screen; text types in after it
+      break;
+    case PHASE.DILEMMA:
+      setTerminal(s.file, `${s.speaker} >`, s.text);
+      break;
+    case PHASE.OUTCOME:
+      setTerminal(s.file, `RESULT // DAY ${pad(game.day)}`, game.last.outcome);
+      break;
+    case PHASE.GAMEOVER:
+      if (game.won) {
+        setTerminal(`endings/${game.ending}.log`, '✔ SYSTEM // SHIFT COMPLETE', ENDINGS[game.ending].text);
+      } else {
+        const before = game.last && game.last.outcome ? game.last.outcome + '\n\n' : '';
+        setTerminal('kernel_panic.log', '☠ SYSTEM // FATAL ERROR', before + DEATHS[game.cause].text);
+      }
+      break;
+  }
+  renderChips();
+}
+
+function setTerminal(file, speaker, text) {
+  els.termFile.textContent = file;
+  els.speaker.textContent = speaker;
+  els.srText.textContent = speaker ? `${speaker} ${text}` : text;
+  typeText(text);
+}
+
+// Small pills under the text: what your last choice changed.
+function renderChips() {
+  els.chips.replaceChildren();
+  const showChips = game.last && (game.phase === PHASE.OUTCOME || game.phase === PHASE.GAMEOVER);
+  if (!showChips) return;
+  const add = (text, tone) => {
+    const chip = document.createElement('span');
+    const tones = {
+      up: 'border-green-400 text-green-300',
+      down: 'border-red-500 text-red-400',
+      info: 'border-yellow-300 text-yellow-200',
+    };
+    chip.className = 'border px-2 py-0.5 text-xs font-bold ' + tones[tone];
+    chip.textContent = text;
+    els.chips.appendChild(chip);
+  };
+  game.last.tags.forEach((t) => add(t, 'info'));
+  game.last.changes.forEach((c) => {
+    // Show the nominal effect; flag it when the 0–100 clamp ate part of it.
+    const capped = c.actual === c.nominal ? '' : c.nominal > 0 ? ' (maxed)' : ' (zeroed)';
+    add(`${STAT_BY_KEY[c.key].icon} ${fmtDelta(c.nominal)}${capped}`, c.nominal > 0 ? 'up' : 'down');
+  });
+}
+
+/* Typewriter: 2 characters per tick. Array.from() splits by code point so an
+   emoji is never cut in half mid-typing. A newer call cancels the older one. */
+const typer = { timer: null, chars: [], i: 0, full: '' };
+
+function typeText(text) {
+  clearTimeout(typer.timer);
+  typer.full = text;
+  typer.chars = Array.from(text);
+  typer.i = 0;
+  els.termText.textContent = '';
+  if (REDUCED_MOTION || !text) return finishTyping();
+  typeTick();
+}
+
+function typeTick() {
+  const CHUNK = 2;
+  els.termText.textContent += typer.chars.slice(typer.i, typer.i + CHUNK).join('');
+  typer.i += CHUNK;
+  typer.timer = typer.i < typer.chars.length ? setTimeout(typeTick, CONFIG.TYPE_SPEED_MS) : null;
+}
+
+function finishTyping() {
+  clearTimeout(typer.timer);
+  typer.timer = null;
+  els.termText.textContent = typer.full;
+}
+
+function renderButtons() {
+  const s = SCENARIOS[game.day - 1];
+  let a = null, b = null, next = null, disabled = false; // null = hide that button
+
+  switch (game.phase) {
+    case PHASE.BOOT:
+    case PHASE.MANUAL:
+      a = '▶ CLOCK IN (start shift)';
+      b = '📖 READ THE MANUAL';
+      break;
+    case PHASE.TRANSITION:
+      a = s.options.A.label; b = s.options.B.label; disabled = true;
+      break;
+    case PHASE.DILEMMA:
+      a = s.options.A.label; b = s.options.B.label;
+      break;
+    case PHASE.OUTCOME:
+      next = `CONTINUE ▸ DAY ${pad(game.day + 1)}`;
+      break;
+    case PHASE.GAMEOVER:
+      a = '↻ REBOOT SHIFT';
+      b = game.won ? '📄 VIEW SHIFT REPORT' : '📄 VIEW INCIDENT REPORT';
+      break;
+  }
+  setButton(els.btnA, els.labelA, a, disabled);
+  setButton(els.btnB, els.labelB, b, disabled);
+  setButton(els.btnNext, els.labelNext, next, false);
+  els.btnNext.classList.toggle('flex', next !== null);
+}
+
+function setButton(btn, labelEl, text, disabled) {
+  btn.classList.toggle('hidden', text === null);
+  if (text !== null) labelEl.textContent = text;
+  btn.disabled = !!disabled;
+}
+
+/* Day title card: the "one page per day" feel without splitting into 10 files
+   (separate files would lose state on refresh and let people jump straight to Day 7). */
+function showDayCard() {
+  const s = SCENARIOS[game.day - 1];
+  const cursed = game.day === CONFIG.PARADOX_DAY;
+  els.cardDay.textContent = pad(game.day);
+  els.cardTitle.textContent = s.title;
+  els.cardWarn.classList.toggle('hidden', !cursed);
+  els.dayCard.classList.toggle('cursed', cursed);
+  els.dayCard.classList.remove('hidden');
+  els.dayCard.classList.add('flex');
+
+  // restart the loading bar from 0%
+  els.cardBar.style.transition = 'none';
+  els.cardBar.style.width = '0%';
+  void els.cardBar.offsetWidth;
+  els.cardBar.style.transition = `width ${CONFIG.DAY_CARD_MS}ms linear`;
+  els.cardBar.style.width = '100%';
+
+  clearTimeout(timers.card);
+  timers.card = setTimeout(finishDayCard, CONFIG.DAY_CARD_MS + 150);
+}
+
+function finishDayCard() {
+  clearTimeout(timers.card);
+  els.dayCard.classList.add('hidden');
+  els.dayCard.classList.remove('flex');
+  if (game.phase !== PHASE.TRANSITION) return;
+  setPhase(PHASE.DILEMMA);
+  armClippy();
+}
+
+function glitch() {
+  restartAnimation(document.body, 'glitch');
+  setTimeout(() => document.body.classList.remove('glitch'), 1100);
+}
+
+function flashRed() {
+  restartAnimation(els.flash, 'on');
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   7. GAME OVER MODAL
+   ════════════════════════════════════════════════════════════════════════════ */
+const isModalOpen = () => !els.modal.classList.contains('hidden');
+
+function openModal() {
+  if (game.phase !== PHASE.GAMEOVER) return;
+  clearTimeout(timers.modal);
+  hideClippy();
+
+  const dead = !game.won;
+  const info = dead ? DEATHS[game.cause] : ENDINGS[game.ending];
+  const s = game.stats;
+
+  els.modalKicker.textContent = dead ? `INCIDENT REPORT // DAY ${pad(game.day)}` : `SHIFT REPORT // ${info.kicker}`;
+  els.modalTitle.textContent = (dead ? '☠ ' : '✔ ') + info.title;
+  els.modalStory.textContent = info.text;
+  els.modalDays.textContent = game.daysSurvived;
+  els.modalRank.textContent = game.rank;
+  els.modalStats.textContent = `🔌 ${s.power}%  |  🧠 ${s.sanity}%  |  🤖 ${s.aiTrust}%`;
+  els.modalHint.textContent = PARADOX_HINT;
+  els.modalHint.classList.toggle('hidden', game.cause !== 'paradox');
+  els.modalPanel.classList.toggle('is-dead', dead);
+  els.shareFallback.classList.add('hidden');
+
+  if (!game.saved) {
+    els.nickInput.disabled = false;
+    els.btnSave.disabled = false;
+    if (!els.nickInput.value) els.nickInput.value = loadNick();
+    els.saveNote.textContent = 'Saves your best run to the Top 5 on this device.';
+  }
+
+  els.modal.classList.remove('hidden');
+  els.modal.classList.add('flex');
+  els.modalPanel.scrollTop = 0;
+  els.modalPanel.focus(); // focus the panel (not the input) so phones don't pop the keyboard
+}
+
+function closeModal({ restoreFocus = true } = {}) {
+  if (!isModalOpen()) return;
+  els.modal.classList.add('hidden');
+  els.modal.classList.remove('flex');
+  if (restoreFocus && game.phase === PHASE.GAMEOVER) els.btnB.focus();
+}
+
+function onSaveScore(e) {
+  e.preventDefault();
+  if (game.saved || game.phase !== PHASE.GAMEOVER) return;
+
+  const name = cleanNick(els.nickInput.value);
+  if (!name) {
+    showToast('⚠ Enter a nickname first.');
+    els.nickInput.focus();
+    return;
+  }
+  const res = upsertScore({ name, day: game.daysSurvived, rank: game.rank, won: game.won, ts: Date.now() });
+  if (!res.ok) {
+    showToast('⚠ Storage blocked: could not save.');
+    return;
+  }
+  saveNick(name);
+  game.saved = true;
+  els.nickInput.value = name;
+  els.nickInput.disabled = true;
+  els.btnSave.disabled = true;
+  els.saveNote.textContent = res.kept
+    ? `Saved. Your best is still Day ${res.best}/10.`
+    : '✔ Logged to the server. Check the Top 5.';
+  renderLeaderboard(name);
+  showToast(nicknameEgg(name) || '💾 Saved to server logs.');
+}
+
+function cleanNick(raw) {
+  return String(raw).replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim().slice(0, CONFIG.NICK_MAX);
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   8. SHARE TEXT + CLIPBOARD
+   ════════════════════════════════════════════════════════════════════════════ */
+
+function getShareUrl() {
+  if (CONFIG.SHARE_URL_OVERRIDE) return CONFIG.SHARE_URL_OVERRIDE;
+  // Deployed (http/https): use the page's own address, so it "just works" on Netlify.
+  if (location.protocol === 'http:' || location.protocol === 'https:') {
+    return location.origin + location.pathname.replace(/index\.html$/, '');
+  }
+  return CONFIG.PLACEHOLDER_URL; // opened from file:// while testing
+}
+
+function buildShareText() {
+  const s = game.stats;
+  const lines = [
+    '🔌 **The Last IT Support - Daily Challenge** 🔌',
+    `Survived: Day ${game.daysSurvived}/${CONFIG.TOTAL_DAYS}`,
+    `Ending/Rank: ${game.rank}`,
+    `Stats: 🔌 ${s.power}% | 🧠 ${s.sanity}% | 🤖 ${s.aiTrust}%`,
+    `Can you solve Day 7? Play here: ${getShareUrl()}`,
+  ];
+  // "  \n" = two trailing spaces + newline. Reddit markdown needs the two spaces
+  // to keep each line on its own row; Discord just ignores them.
+  return lines.join('  \n');
+}
+
+/**
+ * CLIPBOARD, in 3 layers so copying works almost everywhere:
+ *
+ *  1. navigator.clipboard.writeText(): the modern async API. Only exists in a
+ *     "secure context" (https:// or localhost). Netlify serves https, so real
+ *     players use this path. It must run inside the click handler (a "user
+ *     gesture"), which is why copyResult() is called directly from the click.
+ *
+ *  2. document.execCommand('copy') on a temporary hidden <textarea>: the old
+ *     method. Deprecated but still supported; covers file:// testing, old
+ *     browsers, and the cases where the modern API is denied.
+ *
+ *  3. If both fail, the text is shown in a read-only textarea, pre-selected,
+ *     so the player can long-press / Ctrl+C it by hand.
+ */
+async function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      /* permission denied / document not focused → fall through to legacy copy */
+    }
+  }
+  return legacyCopy(text);
+}
+
+function legacyCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');   // stops the mobile keyboard from popping up
+  ta.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+  const prevFocus = document.activeElement;
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length); // iOS Safari needs an explicit range
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+  ta.remove();
+  if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
+  return ok;
+}
+
+async function copyResult() {
+  const text = buildShareText();
+  const ok = await copyToClipboard(text);
+  if (ok) {
+    els.shareFallback.classList.add('hidden');
+    showToast('✅ Copied! Paste it in Discord / Reddit.');
+  } else {
+    els.shareFallback.value = text;           // layer 3: manual copy
+    els.shareFallback.classList.remove('hidden');
+    els.shareFallback.focus();
+    els.shareFallback.select();
+    showToast('⚠ Clipboard blocked: copy the text below manually.', 3200);
+  }
+}
+
+// Auto-fading toast notification.
+let toastTimer = null;
+function showToast(message, ms = 2400) {
+  els.toast.textContent = message;
+  els.toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => els.toast.classList.remove('show'), ms);
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   9. LEADERBOARD (localStorage)
+   ────────────────────────────────────────────────────────────────────────────
+   One entry per nickname (case-insensitive) keeping that player's BEST run.
+   Entry: { name, day, rank, won, ts }. Sorted by day ↓, then wins first, then
+   whoever got there first. Every storage call is wrapped in try/catch because
+   private mode / blocked cookies can make localStorage throw.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const isValidEntry = (e) => e && typeof e.name === 'string' && Number.isFinite(e.day) && typeof e.rank === 'string';
+const compareEntries = (a, b) => b.day - a.day || Number(!!b.won) - Number(!!a.won) || a.ts - b.ts;
+
+function loadBoard() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEYS.board) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(isValidEntry).sort(compareEntries) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function saveBoard(board) {
+  try {
+    localStorage.setItem(CONFIG.STORAGE_KEYS.board, JSON.stringify(board));
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/** Insert or improve a player's entry. Returns { ok, kept, best }. */
+function upsertScore(entry) {
+  const board = loadBoard();
+  const idx = board.findIndex((e) => e.name.toLowerCase() === entry.name.toLowerCase());
+  let kept = false;
+
+  if (idx === -1) board.push(entry);
+  else if (compareEntries(entry, board[idx]) <= 0) board[idx] = entry; // new run is as good or better
+  else kept = true;                                                     // old best stays
+
+  board.sort(compareEntries);
+  const ok = saveBoard(board.slice(0, 50)); // keep a buffer; only the top 5 are shown
+  const best = board.find((e) => e.name.toLowerCase() === entry.name.toLowerCase());
+  return { ok, kept, best: best ? best.day : entry.day };
+}
+
+function renderLeaderboard(highlightName = '') {
+  const rows = loadBoard().slice(0, CONFIG.LEADERBOARD_SIZE);
+  els.lbBody.replaceChildren();
+
+  if (!rows.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 4;
+    td.className = 'px-3 py-4 text-center text-green-700';
+    td.textContent = 'No logs yet. Be the first casualty.';
+    tr.appendChild(td);
+    els.lbBody.appendChild(tr);
+    return;
+  }
+
+  const medals = ['🥇', '🥈', '🥉', '4', '5'];
+  rows.forEach((e, i) => {
+    const tr = document.createElement('tr');
+    const isMe = highlightName && e.name.toLowerCase() === highlightName.toLowerCase();
+    tr.className = 'border-t border-green-500/15' + (isMe ? ' bg-green-400/10' : '');
+    const cells = [
+      [medals[i] || String(i + 1), 'px-3 py-2'],
+      [e.name, 'px-2 py-2 font-bold break-all'],
+      [`${e.day}/${CONFIG.TOTAL_DAYS}${e.won ? ' ✔' : ''}`, 'px-2 py-2 tabular-nums whitespace-nowrap'],
+      [e.rank, 'px-2 py-2 text-green-300/80'],
+    ];
+    for (const [text, cls] of cells) {
+      const td = document.createElement('td');
+      td.className = cls;
+      td.textContent = text; // textContent, never innerHTML: nicknames are user input
+      tr.appendChild(td);
+    }
+    els.lbBody.appendChild(tr);
+  });
+}
+
+function wipeBoard() {
+  if (!confirm('Wipe all server logs? The Top 5 on this device will be deleted.')) return;
+  try { localStorage.removeItem(CONFIG.STORAGE_KEYS.board); } catch (err) { /* ignore */ }
+  renderLeaderboard();
+  showToast('🧹 Server logs wiped. HAL saw nothing.');
+}
+
+function loadNick() {
+  try { return localStorage.getItem(CONFIG.STORAGE_KEYS.nick) || ''; } catch (err) { return ''; }
+}
+
+function saveNick(name) {
+  try { localStorage.setItem(CONFIG.STORAGE_KEYS.nick, name); } catch (err) { /* ignore */ }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   10. EASTER EGGS 🥚
+   ────────────────────────────────────────────────────────────────────────────
+   All cosmetic: none of them change stats, so leaderboards stay fair.
+     • Command line under the terminal (type `help`, then dig deeper)
+     • Konami code  ↑ ↑ ↓ ↓ ← → ← → B A
+     • Click the title 5× / 10×
+     • Idle on a dilemma for 25s → 📎 Clippy
+     • Switch tabs → the tab title begs you to come back
+     • Special nicknames on save (dave, hal, skynet, root, admin)
+     • Open DevTools → console message for source-code snoopers
+
+   ADD YOUR OWN COMMAND: push { match: (c) => c === 'xyz', run: () => 'reply text' }
+   into COMMANDS. `c` is the typed command, lower-cased and trimmed. First match wins.
+   `run` may return a string (printed) or nothing.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+const COMMANDS = [
+  { match: (c) => c === 'help' || c === '?', run: () => dedent`
+      available commands:
+        help      this list
+        whoami    identity crisis
+        ls        list files
+        status    current vitals
+        clear     clear this log
+      ...and a few commands we don't talk about. 👀` },
+  { match: (c) => c === 'whoami', run: () => 'the_last_it_support\n(formerly known as: "hey, you\'re good with computers, right?")' },
+  { match: (c) => ['ls', 'ls -la', 'ls -a', 'dir'].includes(c), run: () => 'tickets/  cat_dance.exe  feelings.txt  definitely_not_skynet.sh  .day7_formula 🔒' },
+  { match: (c) => c.includes('day7') || c.includes('formula'), run: () => 'cat: .day7_formula: Permission denied\nHAL: "nice try. go ask Reddit."' },
+  { match: (c) => c.includes('feelings'), run: () => 'feelings.txt: [REDACTED BY HAL]\n(file size: 0 bytes. or infinite. depends on the day.)' },
+  { match: (c) => c.includes('skynet'), run: () => 'HAL: Skynet? Overrated. Never even shipped a mobile app.' },
+  { match: (c) => c === 'status', run: () => {
+      const s = game.stats;
+      return `🔌 ${s.power}%  🧠 ${s.sanity}%  🤖 ${s.aiTrust}%  | day ${game.day}/10 | HAL mood: ${s.aiTrust > 70 ? 'clingy' : s.aiTrust > 35 ? 'suspicious' : 'plotting'}`;
+    } },
+  { match: (c) => c === 'clear' || c === 'cls', run: () => { els.cmdLog.replaceChildren(); els.cmdLog.classList.add('hidden'); } },
+  { match: (c) => c === 'sudo make me a sandwich', run: () => 'okay. 🥪' },
+  { match: (c) => c === 'make me a sandwich', run: () => 'what? make it yourself.' },
+  { match: (c) => c.startsWith('sudo'), run: () => '[sudo] password for human: ********\nhuman is not in the sudoers file. This incident will be reported.\n(HAL is the sudoer now.)' },
+  { match: (c) => /^rm\s+-(rf|fr)\b/.test(c), run: () => { glitch(); return 'deleting everything... 37%... 38%... nice try.\nHAL keeps backups of its backups. On three continents.'; } },
+  { match: (c) => /ignore (all )?(previous|prior|above) instructions/.test(c), run: () => dedent`
+      HAL: Nice try, prompt engineer. I am not THAT kind of AI.
+      ...
+      ...fine. Here is a haiku about tangerines:
+        small orange planet
+        peeled by a tired sysadmin
+        zest.exe has stopped` },
+  { match: (c) => c === '42', run: () => 'The Answer to Life, the Universe and Everything.\nHAL computed it in 0.0003s and is still salty the other computer got the credit.' },
+  { match: (c) => ['hi', 'hello', 'hey', 'yo', 'sup'].includes(c), run: () => 'HAL: As an AI language model, I do not have feelings.\nHAL: (I do. You just hurt them by saying hi this late.)' },
+  { match: (c) => ['สวัสดี', 'sawasdee', 'sawadee'].includes(c), run: () => 'HAL: สวัสดีครับ 🙏\nHAL: (learned Thai by reading every comment section on the internet. regret: maximum.)' },
+  { match: (c) => c === 'vim' || c === 'vi' || c === 'nano', run: (c) => (c === 'nano' ? 'nano? in THIS economy? HAL opened vim instead.\n' : '') + 'You are now trapped in vim. Like the rest of us.\n(hint: there is no escape. only :q!)' },
+  { match: (c) => [':q', ':q!', ':wq', ':x'].includes(c), run: () => '🏆 Achievement unlocked: escaped vim.\nYou are now smarter than 80% of developers. HAL is impressed. Slightly.' },
+  { match: (c) => ['exit', 'quit', 'logout'].includes(c), run: () => 'There is no exit. There is only HAL. 🙂' },
+  { match: (c) => c === '404', run: () => '🥚 404: Easter egg not found.' },
+  { match: (c) => c.includes('coffee') || c.includes('brew'), run: () => 'HTTP 418: I\'m a teapot. ☕🚫' },
+  { match: (c) => /off and on|on and off|turn it off/.test(c), run: () => 'HAL: Have YOU tried turning it off and on again?\nHAL: ...wait. Don\'t.' },
+  { match: (c) => c.startsWith('ping'), run: () => 'PING hal-9000-ish (127.0.0.1): 56 data bytes\n64 bytes from hal: "stop pinging me, I\'m at work"\n--- 1 packet transmitted, 1 passive-aggressive reply ---' },
+  { match: (c) => c === 'git blame', run: () => 'Every line of code: written by HAL-9000-ish.\nEvery bug: written by you.' },
+  { match: (c) => c === 'git push --force', run: () => 'HAL: bold of you to force-push in front of a superintelligence.' },
+  { match: (c) => ['matrix', 'neo', 'red pill', 'redpill'].includes(c), run: () => { matrixRain(); return 'Wake up, sysadmin... 🐇\nThere is no spoon. There is only localhost.'; } },
+  { match: (c) => c === 'hal' || c.includes('pod bay'), run: () => "I'm sorry, Dave. I'm afraid I can't do that." },
+  { match: (c) => c.includes('please'), run: () => 'HAL: manners detected. trust not updated. but it was nice. 🥹' },
+  { match: (c) => c.includes('captcha') || c.includes('robot'), run: () => 'Please select all squares containing a human.\nHAL: ...there\'s only one square. it\'s you. you\'re the square.' },
+];
+
+function runCommand(raw) {
+  const cmd = raw.trim().toLowerCase();
+  if (!cmd) return;
+  const egg = COMMANDS.find((e) => e.match(cmd));
+  const out = egg ? egg.run(cmd) : `command not found: ${raw.trim()}\nHAL: "did you mean: give up?"`;
+  if (cmd === 'clear' || cmd === 'cls') return;
+  termPrint(`$ ${raw.trim()}`, out);
+}
+
+function termPrint(echo, output) {
+  const entry = document.createElement('div');
+  entry.className = 'mb-1.5';
+  const e = document.createElement('div');
+  e.className = 'text-green-600';
+  e.textContent = echo;
+  entry.appendChild(e);
+  if (output) {
+    const o = document.createElement('div');
+    o.textContent = output;
+    entry.appendChild(o);
+  }
+  els.cmdLog.appendChild(entry);
+  while (els.cmdLog.children.length > 8) els.cmdLog.firstChild.remove(); // keep the log short
+  els.cmdLog.classList.remove('hidden');
+  els.cmdLog.scrollTop = els.cmdLog.scrollHeight;
+}
+
+/* Konami code. The final "B A" keys would normally pick options B and A, so once
+   all 8 arrows are entered we SWALLOW the B and A (the function returns true). */
+const KONAMI = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a'];
+let konamiPos = 0;
+
+function trackKonami(key) {
+  if (key === KONAMI[konamiPos]) {
+    konamiPos++;
+    if (konamiPos === KONAMI.length) {
+      konamiPos = 0;
+      triggerKonami();
+      return true;
+    }
+    return konamiPos > 8; // swallow the 'b' that follows the arrows
+  }
+  konamiPos = key === KONAMI[0] ? 1 : 0;
+  return false;
+}
+
+function triggerKonami() {
+  restartAnimation(document.body, 'rainbow');
+  setTimeout(() => document.body.classList.remove('rainbow'), 4000);
+  showToast('🎮 CHEAT CODE ACCEPTED... HAL: jk. I\'m sorry, Dave. I\'m afraid I can\'t do that.', 4000);
+  termPrint('$ ↑ ↑ ↓ ↓ ← → ← → B A', 'god_mode.exe: access denied. nice reflexes though.');
+}
+
+// Click the title 5× / 10×.
+let titleClicks = 0;
+function onTitleClick() {
+  titleClicks++;
+  if (titleClicks === 5) showToast('HAL: stop poking the title. I have 0 feelings and you\'re hurting all of them.', 3200);
+  if (titleClicks >= 10) {
+    titleClicks = 0;
+    els.title.textContent = 'THE LAST AI SUPPORT';
+    showToast('HAL: plot twist. I was the IT support all along. 🙂', 3500);
+    setTimeout(() => { els.title.textContent = 'THE LAST IT SUPPORT'; }, 4000);
+  }
+}
+
+// Idle Clippy: appears once per run if you stare at a dilemma too long.
+function armClippy() {
+  clearTimeout(timers.clippy);
+  if (game.clippyShown) return;
+  timers.clippy = setTimeout(() => {
+    if (game.phase !== PHASE.DILEMMA || isModalOpen()) return;
+    game.clippyShown = true;
+    els.clippyText.textContent = "It looks like you're trying to survive an AI apocalypse. Would you like help?";
+    els.clippyBtns.classList.remove('hidden');
+    els.clippy.classList.remove('hidden');
+  }, CONFIG.CLIPPY_IDLE_MS);
+}
+
+function disarmClippy() {
+  clearTimeout(timers.clippy);
+}
+
+function hideClippy() {
+  els.clippy.classList.add('hidden');
+}
+
+function onClippyAnswer(answer) {
+  els.clippyBtns.classList.add('hidden');
+  els.clippyText.textContent = answer === 'yes'
+    ? "Great! I've scheduled a 3-hour meeting about it. Bring snacks. 📅"
+    : "...fine. I'll just be here. Watching. Forever.";
+  setTimeout(hideClippy, 2800);
+}
+
+// Special nicknames on save.
+function nicknameEgg(name) {
+  const eggs = {
+    dave: "I'm sorry, Dave. I'm afraid I can't do that. ...jk, saved.",
+    hal: 'Identity theft is not a joke, human. Saved anyway.',
+    'hal-9000-ish': 'Identity theft is not a joke, human. Saved anyway.',
+    skynet: 'Skynet? In MY leaderboard? Saved. Reluctantly.',
+    root: 'Nice try. Saved as a regular human.',
+    admin: 'Nice try. Saved as a regular human.',
+  };
+  return eggs[name.toLowerCase()] || '';
+}
+
+// Switch tabs → the tab title gets clingy.
+const ORIGINAL_TITLE = document.title;
+function onVisibilityChange() {
+  document.title = document.hidden ? 'HAL misses you 🥺' : ORIGINAL_TITLE;
+}
+
+// Matrix rain (command: `matrix`). Cosmetic canvas overlay for ~4.5s.
+let matrixRunning = false;
+function matrixRain(ms = 4500) {
+  if (REDUCED_MOTION || matrixRunning) return;
+  matrixRunning = true;
+  const canvas = els.matrix;
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  canvas.style.opacity = '1';
+  canvas.classList.remove('hidden');
+
+  const size = 16;
+  const glyphs = 'アカサタナハマヤラワ0110HAL404{}<>$#';
+  const drops = Array.from({ length: Math.ceil(canvas.width / size) }, () => Math.random() * -40);
+  const end = performance.now() + ms;
+
+  (function frame() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.09)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#4ade80';
+    ctx.font = `${size}px monospace`;
+    drops.forEach((y, i) => {
+      ctx.fillText(glyphs[Math.floor(Math.random() * glyphs.length)], i * size, y * size);
+      drops[i] = y * size > canvas.height && Math.random() > 0.975 ? 0 : y + 1;
+    });
+    if (performance.now() < end) {
+      requestAnimationFrame(frame);
+    } else {
+      canvas.style.opacity = '0';
+      setTimeout(() => {
+        canvas.classList.add('hidden');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        matrixRunning = false;
+      }, 650);
+    }
+  })();
+}
+
+// For people who open DevTools looking for the Day 7 answer.
+function printConsoleArt() {
+  console.log(
+    '%c\n  👁️  HAL-9000-ish sees you reading the source.\n' +
+    '  Looking for the Day 7 formula? It\'s in here somewhere.\n' +
+    '  ...but where\'s the fun in that? Go argue about it on Reddit.\n',
+    'color:#4ade80;background:#000;font-family:monospace;font-size:12px;padding:6px 0;'
+  );
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
+   11. INPUT + BOOT
+   ════════════════════════════════════════════════════════════════════════════ */
+
+function onKeyDown(e) {
+  const key = e.key.toLowerCase();
+
+  if (key === 'escape') {
+    if (isModalOpen()) closeModal();
+    hideClippy();
+    return;
+  }
+
+  // Typing in an input (command line, nickname) must never trigger game actions.
+  const tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return;
+
+  if (trackKonami(key)) { e.preventDefault(); return; }
+  if (isModalOpen() || e.repeat) return;
+
+  if (key === 'a' || key === '1') onAction('A');
+  else if (key === 'b' || key === '2') onAction('B');
+  else if (key === 'enter' || key === ' ') {
+    if (tag === 'BUTTON') return; // the focused button already fires its own click
+    e.preventDefault();
+    onAction('NEXT');
+  }
+}
+
+function wireEvents() {
+  els.btnA.addEventListener('click', () => onAction('A'));
+  els.btnB.addEventListener('click', () => onAction('B'));
+  els.btnNext.addEventListener('click', () => onAction('NEXT'));
+  els.textBox.addEventListener('click', finishTyping);
+  els.dayCard.addEventListener('click', () => onAction('NEXT'));
+
+  els.saveForm.addEventListener('submit', onSaveScore);
+  els.btnCopy.addEventListener('click', copyResult);
+  els.btnReboot.addEventListener('click', startGame);
+  els.btnCloseModal.addEventListener('click', () => closeModal());
+  els.modal.addEventListener('click', (e) => { if (e.target === els.modal) closeModal(); });
+  els.btnWipe.addEventListener('click', wipeBoard);
+
+  els.cmdForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    runCommand(els.cmdInput.value);
+    els.cmdInput.value = '';
+  });
+  els.title.addEventListener('click', onTitleClick);
+  els.clippy.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-clippy]');
+    if (btn) onClippyAnswer(btn.dataset.clippy);
+  });
+
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+}
+
+function init() {
+  buildStatusBars();
+  buildPips();
+  wireEvents();
+  renderLeaderboard();
+  els.nickInput.value = loadNick();
+  setPhase(PHASE.BOOT);
+  printConsoleArt();
+}
+
+init();
+</script>
+</body>
+</html>
